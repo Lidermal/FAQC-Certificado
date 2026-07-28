@@ -37,23 +37,26 @@
             * {
                 margin: 0;
                 padding: 0;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
             }
             
             @page {
                 size: A4 landscape;
-                margin: 0;
+                margin: 0 !important;
             }
 
             html, body {
-                width: 100%;
-                min-height: 100%;
-                margin: 0;
-                padding: 0;
-                background: white;
+                width: 1123px !important;
+                height: 794px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: hidden !important; /* Corta qualquer fuga que gere a página 2 */
+                background-color: white !important;
             }
 
             body {
-                display: block;
+                display: block !important; /* Remove o flex do tailwind que empurra o design no print */
             }
 
             #certificado-container {
@@ -61,18 +64,20 @@
                 transform: none !important;
                 width: 1123px !important;
                 height: 794px !important;
-                margin: 0 auto !important;
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                margin: 0 !important;
                 padding: 0 !important;
-                display: flex !important;
-                position: relative !important;
-                overflow: hidden !important;
+                page-break-inside: avoid;
+                page-break-after: avoid;
             }
             
             .no-print {
                 display: none !important;
             }
             
-            /* Garante que apenas o certificado seja impresso */
+            /* Garante que apenas o certificado seja impresso e oculta o resto */
             body > *:not(#certificado-container) {
                 display: none !important;
             }
@@ -228,14 +233,13 @@
         // --- FUNÇÕES DE IMPRESSÃO E DOWNLOAD CORRIGIDAS --- //
 
         function imprimirCertificado() {
-            const botao = document.getElementById('print-button');
             const aviso = mostrarAviso('Preparando impressão do certificado...', 'processo', 3000);
             
-            // O CSS @media print já oculta os botões e ajusta a tela para A4.
+            // Um leve timeout para o CSS de impressão organizar a tela, e o aviso aparecer
             setTimeout(() => {
                 window.print();
                 if (aviso) aviso.remove();
-            }, 500); // pequeno delay para o aviso aparecer antes da tela de impressão
+            }, 500);
         }
 
         async function baixarCertificado() {
@@ -248,32 +252,37 @@
                 
                 const fonte = document.getElementById('certificado-container');
                 
-                // Salvar as classes atuais e remover a escala temporariamente
-                // Isso garante que o html2canvas capture o tamanho real exato (1123x794) 
-                // sem desalinhar itens.
+                // Backup exato do CSS para restaurar sem piscar ou quebrar a tela original
                 const classListBackup = fonte.className;
-                fonte.classList.remove('scale-75', 'xl:scale-100');
+                const transformBackup = fonte.style.transform;
                 
-                // Aguarda um instante para o navegador aplicar a remoção do scale antes de bater a foto
+                // Remove QUALQUER classe de escala ou origem que possa confundir o html2canvas
+                fonte.classList.remove('scale-75', 'xl:scale-100', 'transform', 'origin-top', 'xl:origin-center');
+                fonte.style.transform = 'none';
+                
+                // Aguardamos um instante para o navegador "desenhar" o elemento sem o zoom antes do print real
                 await new Promise(resolve => setTimeout(resolve, 150));
 
                 const canvas = await html2canvas(fonte, { 
-                    scale: 3, // Multiplicador de qualidade para o PNG gerado
+                    scale: 3, // Multiplicador de qualidade para o PNG
                     useCORS: true, 
                     allowTaint: false, 
                     backgroundColor: '#FDF8F2', 
                     width: 1123, 
-                    height: 794, 
+                    height: 794,
+                    windowWidth: 1123, // Trava a largura virtual interna do canvas
+                    windowHeight: 794, // Trava a altura virtual interna do canvas
                     logging: false 
                 });
 
-                // Restaurar as classes de escala imediatamente após gerar o canvas
+                // Restaura imediatamente a visualização responsiva pro usuário
                 fonte.className = classListBackup;
+                fonte.style.transform = transformBackup;
 
                 const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
                 if (!pngBlob) throw new Error('Falha ao processar a imagem do PNG.');
                 
-                // Tenta usar a API nativa de salvar arquivo (se suportada pelo navegador)
+                // API nativa moderna de salvar
                 if (window.showSaveFilePicker) {
                     try {
                         const handle = await window.showSaveFilePicker({ 
@@ -295,7 +304,7 @@
                     }
                 }
                 
-                // Fallback (método tradicional) para download via link
+                // Download clássico caso o showSaveFilePicker não seja suportado (Safari/Firefox)
                 const url = URL.createObjectURL(pngBlob);
                 const link = document.createElement('a');
                 link.href = url;
